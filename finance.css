@@ -1,0 +1,27 @@
+.tx { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.tx:last-child { border-bottom: 0; }
+.tx-main { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.tx-amt { font-weight: 700; white-space: nowrap; }
+.tx.income .tx-amt { color: var(--ok); } .tx.expense .tx-amt { color: var(--text); }
+.budget-row { padding: 8px 0; display: flex; flex-direction: column; gap: 2px; }
+.goal { display: flex; flex-direction: column; gap: 4px; }
+.goal h3 { margin: 0; }
+.scroll-x { overflow-x: auto; max-width: 100%; }
+.table { width: 100%; border-collapse: collapse; min-width: 420px; }
+.table th, .table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.table th { color: var(--muted); font-weight: 600; font-size: .85rem; }
+
+/* Grafik */
+.chart-wrap { margin: 8px 0; }
+.chart { width: 100%; height: auto; display: block; }
+.chart .axis { stroke: var(--line); stroke-width: 1; }
+.chart .axis-label { fill: var(--muted); font-size: 13px; font-family: var(--font); }
+.bar.s1, .dot.s1 { fill: var(--accent); background: var(--accent); }
+.bar.s2, .dot.s2 { fill: var(--accent-2); background: var(--accent-2); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: .85rem; }
+.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.hbars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.hbars li { display: grid; grid-template-columns: minmax(80px, 160px) minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.hb-label { overflow-wrap: anywhere; } .hb-track { height: 10px; background: var(--card-2); border-radius: 999px; overflow: hidden; display: block; border: 1px solid var(--line); }
+.hb-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; }
+.hb-val { font-weight: 600; white-space: nowrap; }

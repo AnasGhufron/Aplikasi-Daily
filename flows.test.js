@@ -1,0 +1,132 @@
+// Uji alur tambahan di Chromium. Jalankan: node tests/flows.test.js
+const path = require('path');
+const { chromium } = require('playwright');
+const URL = 'file://' + path.resolve(__dirname, '..', 'index.html');
+let passed = 0, failed = 0;
+const ok = (c, m) => { if (c) { passed++; console.log('  ✔ ' + m); } else { failed++; console.log('  ✘ GAGAL: ' + m); } };
+
+(async () => {
+  const browser = await chromium.launch();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'id-ID' });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  await page.goto(URL);
+
+  console.log('Tugas');
+  await page.goto(URL + '#/tugas');
+  await page.getByRole('button', { name: 'Tambah tugas' }).first().click();
+  await page.locator('#modal input[name=title]').fill('Kerjakan PR');
+  await page.locator('#modal input[name=due]').fill(await page.evaluate(() => NX.util.today()));
+  await page.getByRole('button', { name: 'Simpan' }).click();
+  await page.waitForTimeout(150);
+  ok((await page.locator('#view').innerText()).includes('Kerjakan PR'), 'tugas hari ini muncul');
+  await page.getByLabel('Tandai selesai: Kerjakan PR').check();
+  await page.waitForTimeout(150);
+  ok((await page.evaluate(() => NX.storage.get().tasks[0].status)) === 'done', 'tugas ditandai selesai');
+  ok(!(await page.locator('#view .tasks').count()), 'tugas selesai tidak tampil sebagai tugas hari ini');
+
+  console.log('Tabungan lewat formulir');
+  await page.goto(URL + '#/keuangan');
+  await page.evaluate(() => NX.storage.update(s => { s.settings.financeSetup = 'done'; s.transactions.push({ id: 'i', type: 'income', amount: 300000, category: 'Uang saku', date: NX.util.today(), description: 'saku', method: 'Tunai', createdAt: '1' }); }));
+  await page.goto(URL + '#/tabungan');
+  await page.getByRole('button', { name: 'Tambah target' }).first().click();
+  await page.locator('#modal input[name=name]').fill('Buku');
+  await page.locator('#modal input[name=target]').fill('500000');
+  await page.getByRole('button', { name: 'Simpan' }).click();
+  await page.waitForTimeout(150);
+  await page.getByRole('button', { name: 'Tambah tabungan' }).click();
+  await page.locator('#modal input[name=amount]').fill('999999');
+  await page.getByRole('button', { name: 'Simpan' }).click();
+  ok(await page.locator('#modal .form-error').isVisible(), 'setoran melebihi saldo tersedia ditolak');
+  await page.locator('#modal input[name=amount]').fill('100000');
+  await page.getByRole('button', { name: 'Simpan' }).click();
+  await page.waitForTimeout(150);
+  const bal = await page.evaluate(() => ({ b: NX.fin.balance(), a: NX.fin.available() }));
+  ok(bal.b === 300000 && bal.a === 200000, 'setoran tabungan mengurangi saldo tersedia, bukan saldo (' + bal.b + '/' + bal.a + ')');
+  await page.getByRole('button', { name: 'Koreksi' }).click();
+  await page.locator('#modal input[name=amount]').fill('150000');
+  await page.locator('#modal input[name=note]').fill('salah input');
+  await page.getByRole('button', { name: 'Simpan' }).click();
+  ok(await page.locator('#modal .form-error').isVisible(), 'koreksi melebihi dana terkumpul ditolak');
+  await page.locator('#modal input[name=amount]').fill('40000');
+  await page.getByRole('button', { name: 'Simpan' }).click();
+  await page.waitForTimeout(150);
+  ok((await page.evaluate(() => NX.savings.collected(NX.storage.get().savings[0]))) === 60000, 'koreksi tercatat dan mengurangi total terkumpul');
+
+  console.log('Rutinitas dan kebiasaan');
+  await page.goto(URL + '#/rutinitas');
+  await page.getByRole('button', { name: 'Pakai contoh rutinitas' }).click();
+  await page.waitForTimeout(150);
+  ok((await page.evaluate(() => NX.storage.get().routines.length)) === 7, 'contoh rutinitas ditambahkan (bisa diubah)');
+  await page.getByRole('button', { name: 'Tambah kebiasaan' }).first().click();
+  await page.locator('#modal input[name=name]').fill('Latihan Linux');
+  await page.getByRole('button', { name: 'Simpan' }).click();
+  await page.waitForTimeout(150);
+  await page.getByRole('checkbox', { name: 'Latihan Linux' }).check();
+  await page.waitForTimeout(150);
+  ok((await page.evaluate(() => NX.habits.weekRate(NX.util.weekStart(NX.util.today())).done)) === 1, 'kebiasaan dicentang dan terhitung pekan ini');
+
+  console.log('Tema dan penyimpanan');
+  await page.click('#themeBtn');
+  await page.waitForTimeout(150);
+  ok((await page.evaluate(() => document.documentElement.dataset.theme)) === 'light', 'tombol tema beralih ke terang');
+  await page.reload();
+  ok((await page.evaluate(() => document.documentElement.dataset.theme)) === 'light', 'tema tersimpan setelah reload');
+
+  console.log('Pemulihan data rusak');
+  await page.evaluate(() => localStorage.setItem('nexus.v1', '{rusak'));
+  await page.reload();
+  await page.waitForTimeout(150);
+  ok(await page.locator('#banner').isVisible(), 'data rusak memunculkan pemberitahuan dan aplikasi tetap jalan');
+  ok((await page.evaluate(() => Object.keys(localStorage).some(k => k.startsWith('nexus.v1.rusak')))), 'salinan data rusak disimpan, tidak dihapus');
+
+  console.log('Impor lewat tampilan: ringkasan sebelum diterapkan');
+  const sample = JSON.stringify({ app: 'NEXUS', version: 1, tasks: [{ id: 'z1', title: 'Dari impor', status: 'todo', category: 'Pribadi', priority: 'Sedang', due: '' }] });
+  await page.goto(URL + '#/pengaturan');
+  await page.setInputFiles('#importFile', { name: 'data.json', mimeType: 'application/json', buffer: Buffer.from(sample) });
+  await page.waitForTimeout(200);
+  ok((await page.locator('#modal').innerText()).includes('Konfirmasi impor') && (await page.locator('#modal').innerText()).includes('Tugas'), 'ringkasan impor ditampilkan sebelum diterapkan');
+  await page.getByRole('button', { name: 'Gabungkan' }).click();
+  await page.waitForTimeout(150);
+  ok((await page.evaluate(() => NX.storage.get().tasks.some(t => t.id === 'z1'))), 'impor mode gabung menambahkan data');
+  ok((await page.evaluate(() => !!NX.storage.backupInfo())), 'cadangan otomatis dibuat sebelum impor');
+  await page.setInputFiles('#importFile', { name: 'rusak.json', mimeType: 'application/json', buffer: Buffer.from('{"tasks": "bukan daftar"}') });
+  await page.waitForTimeout(200);
+  ok((await page.locator('.toast.error').count()) >= 1, 'berkas impor tidak valid ditolak dengan pesan');
+
+  console.log('Menu HP dan keyboard');
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto(URL + '#/dashboard');
+  await page.click('#menuBtn');
+  await page.waitForTimeout(250);
+  ok(await page.locator('#sidebar.open').count() === 1, 'menu samping terbuka di HP');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(100);
+  ok(await page.locator('#sidebar.open').count() === 0, 'Escape menutup menu');
+  await page.click('#bnMenu');
+  await page.locator('#sidebar a[data-route=keuangan]').click();
+  await page.waitForTimeout(150);
+  ok((await page.evaluate(() => location.hash)) === '#/keuangan' && (await page.locator('#sidebar.open').count()) === 0, 'navigasi dari menu HP bekerja dan menutup menu');
+
+  console.log('Reset berlapis');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(URL + '#/pengaturan');
+  await page.getByRole('button', { name: /Reset semua data/ }).click();
+  await page.locator('dialog.confirm button', { hasText: 'Lanjut' }).click();
+  await page.waitForTimeout(150);
+  const delBtn = page.getByRole('button', { name: 'Hapus semua data' });
+  ok(await delBtn.isDisabled(), 'tombol hapus nonaktif sebelum mengetik RESET');
+  await page.locator('#modal input').fill('RESET');
+  ok(await delBtn.isEnabled(), 'tombol hapus aktif setelah mengetik RESET');
+  await delBtn.click();
+  await page.waitForTimeout(150);
+  ok((await page.evaluate(() => NX.storage.get().tasks.length)) === 0, 'reset menghapus data');
+  ok((await page.evaluate(() => !!NX.storage.backupInfo())), 'cadangan dibuat sebelum reset');
+
+  ok(errors.length === 0, 'tidak ada error konsol' + (errors.length ? ': ' + errors.join(' | ') : ''));
+  await browser.close();
+  console.log('\nLulus: ' + passed + ', gagal: ' + failed);
+  process.exit(failed ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(1); });
